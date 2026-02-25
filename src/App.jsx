@@ -3318,11 +3318,11 @@ export default function TimetableApp() {
                         <thead>
                           <tr>
                             <th rowSpan={2} className="p-1 w-10 text-[10px] text-gray-500 bg-gray-50 border border-gray-200">교시</th>
-                            {dayHeaders.map((dayLabel) => (
+                            {dayHeaders.map((dayLabel, dIdx) => (
                               <th
                                 key={`monthly-all-day-head-${weekName}-${dayLabel}`}
                                 colSpan={CLASSES.length}
-                                className="p-1.5 font-bold text-gray-700 bg-indigo-50 border border-indigo-100"
+                                className={`p-1.5 font-bold text-gray-700 bg-indigo-50 border border-indigo-100 ${dIdx > 0 ? 'border-l-2 border-l-gray-400' : ''}`}
                                 style={{ fontSize: `${Math.max(9, Math.min(13, 10.5 * getMonthlyScaleRatio())).toFixed(1)}px` }}
                               >
                                 {dayLabel}
@@ -3330,11 +3330,11 @@ export default function TimetableApp() {
                             ))}
                           </tr>
                           <tr>
-                            {DAYS.map((day) => (
-                              CLASSES.map((cls) => (
+                            {DAYS.map((day, dIdx) => (
+                              CLASSES.map((cls, clsIdx) => (
                                 <th
                                   key={`monthly-all-class-head-${weekName}-${day}-${cls}`}
-                                  className="p-0.5 text-[10px] font-semibold text-gray-500 bg-gray-50 border border-gray-200"
+                                  className={`p-0.5 text-[10px] font-semibold text-gray-500 bg-gray-50 border border-gray-200 ${dIdx > 0 && clsIdx === 0 ? 'border-l-2 border-l-gray-400' : ''}`}
                                 >
                                   {cls.replace('반', '')}
                                 </th>
@@ -3352,13 +3352,16 @@ export default function TimetableApp() {
                                 {period}
                               </td>
                               {DAYS.map((_, dIdx) => (
-                                CLASSES.map((cls) => {
+                                CLASSES.map((cls, clsIdx) => {
                                   const cell = weekSchedules[cls][pIdx][dIdx];
                                   const { style, overlay } = getMonthlyClassCellStyles(weekName, cls, pIdx, dIdx, cell, true);
                                   const hasTeacherLine = cell.type === 'special' && Boolean(cell.teacher);
                                   const denseFitScale = getMonthlyDenseCellFitScale(cell);
                                   return (
-                                    <td key={`monthly-all-cell-${weekName}-${pIdx}-${dIdx}-${cls}`} className="p-0.5 align-middle">
+                                    <td
+                                      key={`monthly-all-cell-${weekName}-${pIdx}-${dIdx}-${cls}`}
+                                      className={`p-0.5 align-middle ${dIdx > 0 && clsIdx === 0 ? 'border-l-2 border-l-gray-400' : ''}`}
+                                    >
                                       <div
                                         onClick={() => {
                                           if (isSpacePanMode) return;
