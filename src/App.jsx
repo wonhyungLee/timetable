@@ -12,7 +12,7 @@ const ALL_SUBJECTS = [
   '자율자치', '동아리', '봉사', '진로', '학교자율', '창체', '휴업일'
 ];
 
-const HOMEROOM_FLEX_SUBJECTS = ['과학', '체육', '음악'];
+const HOMEROOM_FLEX_SUBJECTS = ['과학', '체육', '음악', '영어'];
 const HOMEROOM_OVERRIDE_PREFIX = '__homeroom__::';
 
 const toHomeroomOverrideValue = (subject) => `${HOMEROOM_OVERRIDE_PREFIX}${subject}`;
@@ -2318,7 +2318,7 @@ export default function TimetableApp() {
     // 휴업일은 설정에서 의도적으로 지정한 예외로 간주
     if (actual.type === 'holiday' || actual.subject === '휴업일') return hasOriginalPlacementMismatch;
 
-    // 과학/체육/음악은 담임 수업으로 운용 가능하므로 템플릿 불일치에서 제외
+    // 과학/체육/음악/영어는 담임 수업으로 운용 가능하므로 템플릿 불일치에서 제외
     if (
       actual.type === 'homeroom' &&
       HOMEROOM_FLEX_SUBJECTS.includes((actual.subject || '').trim())
@@ -2874,7 +2874,7 @@ export default function TimetableApp() {
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-400">과학/체육/음악은 전담/담임 선택 가능</p>
+                  <p className="text-xs text-gray-400">과학/체육/음악/영어는 전담/담임 선택 가능</p>
                 </div>
 
                 <div className="space-y-2">
