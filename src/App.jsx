@@ -3210,6 +3210,9 @@ export default function TimetableApp() {
                     
                     return DAYS.map((day, dIdx) => {
                       return PERIODS.map((period, pIdx) => {
+                        const isDayDividerRow = pIdx === 0 && dIdx > 0;
+                        const dayDividerTopClass = isDayDividerRow ? 'border-t-2 border-t-gray-400 ' : '';
+
                         return (
                           <tr key={`${weekIdx}-${dIdx}-${pIdx}`} className="hover:bg-blue-50/30">
                             {dIdx === 0 && pIdx === 0 && (
@@ -3218,11 +3221,11 @@ export default function TimetableApp() {
                               </td>
                             )}
                             {pIdx === 0 && (
-                              <td rowSpan={6} className="border border-gray-300 bg-gray-50 font-bold text-gray-700 w-12 text-center leading-tight">
+                              <td rowSpan={6} className={`${dayDividerTopClass}border border-gray-300 bg-gray-50 font-bold text-gray-700 w-12 text-center leading-tight`}>
                                 {day}<br/><span className="text-[10px] font-normal text-gray-500">({daysWithDates[dIdx].split('(')[1]}</span>
                               </td>
                             )}
-                            <td className="border border-gray-300 text-gray-500 w-14 text-center bg-white">{period}교시</td>
+                            <td className={`${dayDividerTopClass}border border-gray-300 text-gray-500 w-14 text-center bg-white`}>{period}교시</td>
                             {CLASSES.map(cls => {
                               const cell = weekSchedules[cls][pIdx][dIdx];
                               const isSpecial = cell.type !== 'homeroom' && cell.type !== 'empty' && cell.type !== 'holiday';
@@ -3234,7 +3237,7 @@ export default function TimetableApp() {
                               const isSelected = selectedCell?.weekName === weekName && selectedCell?.className === cls && selectedCell?.p === pIdx && selectedCell?.d === dIdx;
                               const swapTargetState = getSwapTargetState(weekName, cls, pIdx, dIdx, cell);
                               
-                              let cellClass = `border border-gray-200 p-1 text-center h-14 relative cursor-pointer transition-all ${isDimmed ? 'opacity-20 grayscale ' : ''} ${isHighlighted ? 'ring-2 ring-inset ring-red-500 font-bold transform scale-105 z-10 shadow-md ' : ''}`;
+                              let cellClass = `${dayDividerTopClass}border border-gray-200 p-1 text-center h-14 relative cursor-pointer transition-all ${isDimmed ? 'opacity-20 grayscale ' : ''} ${isHighlighted ? 'ring-2 ring-inset ring-red-500 font-bold transform scale-105 z-10 shadow-md ' : ''}`;
                               cellClass += getTimetableCellColor(cell) + " ";
                               cellClass += getConflictBorderClassName(isTemplateMismatch, isTeacherConflict, hasForcedConflict);
 
