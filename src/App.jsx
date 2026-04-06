@@ -108,6 +108,37 @@ for(let i=0; i<WEEKS.length; i+=4) {
   });
 }
 
+const createTermCountSummary = () => ({
+  firstTerm: 0,
+  secondTerm: 0,
+  total: 0
+});
+
+const getTermCountKeyForWeek = (weekName = '') => {
+  if (typeof weekName !== 'string') return null;
+  if (weekName.startsWith('1학기')) return 'firstTerm';
+  if (weekName.startsWith('2학기')) return 'secondTerm';
+  return null;
+};
+
+const getSummaryComparisonTone = (actual, standard) => {
+  if (standard > 0) {
+    if (actual > standard) {
+      return { cellClass: 'bg-blue-50/40', totalClass: 'text-blue-600' };
+    }
+    if (actual < standard) {
+      return { cellClass: 'bg-red-50/40', totalClass: 'text-red-500' };
+    }
+    return { cellClass: 'bg-emerald-50/40', totalClass: 'text-emerald-600' };
+  }
+
+  if (actual > 0) {
+    return { cellClass: '', totalClass: 'text-blue-600' };
+  }
+
+  return { cellClass: '', totalClass: 'text-gray-400' };
+};
+
 // --- [2] 전담 교사 및 장소 로직 ---
 const initialTeachers = [
   { id: 't1', name: '하승호', subject: '체육', classes: [1,2,3,4,5,6,7,8,9,10] },
@@ -619,6 +650,77 @@ export default function TimetableApp() {
       ),
     [teacherConfigs, normalizedSpecialTemplates]
   );
+  const classSummaryCounts = useMemo(() => {
+    const counts = {};
+
+    CLASSES.forEach((className) => {
+      counts[className] = {};
+      ALL_SUBJECTS.forEach((subject) => {
+        counts[className][subject] = createTermCountSummary();
+      });
+    });
+
+    Object.entries(allSchedules || {}).forEach(([weekName, weekSchedule]) => {
+      const termKey = getTermCountKeyForWeek(weekName);
+      if (!termKey || !weekSchedule) return;
+
+      CLASSES.forEach((className) => {
+        const classSchedule = weekSchedule[className];
+        if (!Array.isArray(classSchedule)) return;
+
+        classSchedule.forEach((row) => {
+          row.forEach((cell) => {
+            const subject = cell?.subject;
+            if (!subject || subject === '휴업일' || !counts[className]?.[subject]) return;
+
+            counts[className][subject][termKey] += 1;
+            counts[className][subject].total += 1;
+          });
+        });
+      });
+    });
+
+    return counts;
+  }, [allSchedules]);
+  const teacherSummaryCounts = useMemo(() => {
+    const counts = {};
+
+    teacherConfigs.forEach((teacher) => {
+      const byClass = {};
+      CLASSES.forEach((className) => {
+        byClass[className] = createTermCountSummary();
+      });
+
+      counts[teacher.id] = {
+        byClass,
+        total: createTermCountSummary()
+      };
+    });
+
+    Object.entries(allSchedules || {}).forEach(([weekName, weekSchedule]) => {
+      const termKey = getTermCountKeyForWeek(weekName);
+      if (!termKey || !weekSchedule) return;
+
+      CLASSES.forEach((className) => {
+        const classSchedule = weekSchedule[className];
+        if (!Array.isArray(classSchedule)) return;
+
+        classSchedule.forEach((row) => {
+          row.forEach((cell) => {
+            const teacherId = cell?.teacherId;
+            if (!teacherId || !counts[teacherId]) return;
+
+            counts[teacherId].byClass[className][termKey] += 1;
+            counts[teacherId].byClass[className].total += 1;
+            counts[teacherId].total[termKey] += 1;
+            counts[teacherId].total.total += 1;
+          });
+        });
+      });
+    });
+
+    return counts;
+  }, [allSchedules, teacherConfigs]);
 
   useEffect(() => {
     if (!toast.show) return undefined;
@@ -638,6 +740,23 @@ export default function TimetableApp() {
     });
 
   const formatSlotLabel = (periodIndex, dayIndex) => `${DAYS[dayIndex]} ${PERIODS[periodIndex]}교시`;
+  const formatSummaryCount = (count) => (count > 0 ? count : '-');
+  const renderTermCountStack = (counts, options = {}) => {
+    const safeCounts = counts || createTermCountSummary();
+    const {
+      totalLabel = '총계',
+      totalClassName = 'text-slate-700',
+      detailClassName = 'text-slate-500'
+    } = options;
+
+    return (
+      <div className="flex flex-col items-center gap-0.5 leading-tight">
+        <span className={`text-[11px] font-medium ${detailClassName}`}>1학기 {formatSummaryCount(safeCounts.firstTerm)}</span>
+        <span className={`text-[11px] font-medium ${detailClassName}`}>2학기 {formatSummaryCount(safeCounts.secondTerm)}</span>
+        <span className={`text-sm font-bold ${totalClassName}`}>{totalLabel} {formatSummaryCount(safeCounts.total)}</span>
+      </div>
+    );
+  };
   const getCellLabel = (cell) => (cell?.subject ? cell.subject : '빈칸');
   const formatCellAddress = (weekName, className, periodIndex, dayIndex) =>
     `${className} ${formatSlotLabel(periodIndex, dayIndex)}${weekName ? ` [${weekName}]` : ''}`;
@@ -2529,28 +2648,6 @@ export default function TimetableApp() {
     e.preventDefault();
   };
 
-  // --- 집계 로직 (전체 학급 교과 시수) ---
-  const calculateAllClassesSummary = () => {
-    const counts = {};
-    CLASSES.forEach(cls => {
-      counts[cls] = {};
-      ALL_SUBJECTS.forEach(s => counts[cls][s] = 0);
-    });
-    
-    Object.values(allSchedules).forEach(week => {
-      CLASSES.forEach(cls => {
-        week[cls].forEach(dayRows => {
-          dayRows.forEach(cell => {
-            if (cell.subject && cell.subject !== '휴업일') {
-              counts[cls][cell.subject] = (counts[cls][cell.subject] || 0) + 1;
-            }
-          });
-        });
-      });
-    });
-    return counts;
-  };
-
   return (
     <div className={`min-h-screen bg-slate-100 font-sans ${isWideContentMode ? 'p-2 md:p-3' : 'p-2 md:p-6'}`}>
       <div className={`${isWideContentMode ? 'w-full' : 'max-w-[1400px]'} mx-auto ${isQuickEditorVisible ? 'xl:pr-[25rem]' : ''}`}>
@@ -3402,17 +3499,22 @@ export default function TimetableApp() {
 
         {/* ======================= CLASS SUMMARY VIEW (학급별 교과 시수) ======================= */}
         {viewMode === 'class_summary' && (() => {
-          const allClassCounts = calculateAllClassesSummary();
-          let totalStandard = 0;
           const totalActualByClass = {};
-          CLASSES.forEach(c => totalActualByClass[c] = 0);
-          
+          let totalStandard = 0;
+          CLASSES.forEach((className) => {
+            totalActualByClass[className] = createTermCountSummary();
+          });
+
           return (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-gray-100 pb-4">
                 <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <BookOpen className="text-emerald-600"/> 전체 학급 교과/창체 시수 집계표 (1년 전체)
+                  <BookOpen className="text-emerald-600"/> 전체 학급 교과/창체 시수 집계표
                 </h2>
+                <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
+                  <span className="px-3 py-1 rounded-full bg-slate-100 border border-slate-200">각 칸: 1학기 / 2학기 / 총계</span>
+                  <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">색상 기준: 총계 vs 기준 시수</span>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -3421,11 +3523,16 @@ export default function TimetableApp() {
                     <tr className="bg-gray-100 text-gray-800">
                       <th className="border border-gray-300 p-2 font-bold whitespace-nowrap">과목 / 활동</th>
                       <th className="border border-gray-300 p-2 font-bold bg-yellow-50 w-24">기준 시수</th>
-                      {CLASSES.map(cls => <th key={cls} className="border border-gray-300 p-2 font-bold w-12 md:w-16">{cls}</th>)}
+                      {CLASSES.map((cls) => (
+                        <th key={cls} className="border border-gray-300 p-2 font-bold min-w-[96px]">
+                          <div>{cls}</div>
+                          <div className="text-[10px] font-medium text-slate-500">1학기 · 2학기 · 총계</div>
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {ALL_SUBJECTS.filter(s => s !== '휴업일').map(subj => {
+                    {ALL_SUBJECTS.filter((subject) => subject !== '휴업일').map((subj) => {
                       const standard = Number(standardHours[subj]) || 0;
                       totalStandard += standard;
 
@@ -3441,23 +3548,19 @@ export default function TimetableApp() {
                               placeholder="0"
                             />
                           </td>
-                          {CLASSES.map(cls => {
-                            const actual = allClassCounts[cls][subj] || 0;
-                            totalActualByClass[cls] += actual;
-                            const diff = actual - standard;
-                            
-                            let cellColor = "text-gray-600";
-                            if (standard > 0) {
-                              if (diff > 0) cellColor = "text-blue-600 font-bold bg-blue-50/30";
-                              else if (diff < 0) cellColor = "text-red-500 font-bold bg-red-50/30";
-                              else cellColor = "text-emerald-600 font-bold bg-emerald-50/30";
-                            } else if (actual > 0) {
-                              cellColor = "text-blue-600 font-medium";
-                            }
+                          {CLASSES.map((cls) => {
+                            const summary = classSummaryCounts[cls]?.[subj] || createTermCountSummary();
+                            totalActualByClass[cls].firstTerm += summary.firstTerm;
+                            totalActualByClass[cls].secondTerm += summary.secondTerm;
+                            totalActualByClass[cls].total += summary.total;
+                            const comparisonTone = getSummaryComparisonTone(summary.total, standard);
 
                             return (
-                              <td key={cls} className={`border border-gray-300 p-2 ${cellColor}`}>
-                                {actual > 0 ? actual : '-'}
+                              <td key={cls} className={`border border-gray-300 p-2 align-middle ${comparisonTone.cellClass}`}>
+                                {renderTermCountStack(summary, {
+                                  totalClassName: comparisonTone.totalClass,
+                                  detailClassName: summary.total > 0 ? 'text-slate-600' : 'text-slate-400'
+                                })}
                               </td>
                             );
                           })}
@@ -3468,17 +3571,15 @@ export default function TimetableApp() {
                     <tr className="bg-emerald-50 border-t-2 border-emerald-200">
                       <td className="border border-gray-300 p-2 font-extrabold text-emerald-900">총계</td>
                       <td className="border border-gray-300 p-2 font-extrabold text-emerald-900 text-lg">{totalStandard}</td>
-                      {CLASSES.map(cls => {
-                        const total = totalActualByClass[cls];
-                        const diff = total - totalStandard;
-                        let color = "text-emerald-800";
-                        if (totalStandard > 0) {
-                           if (diff > 0) color = "text-blue-600";
-                           else if (diff < 0) color = "text-red-600";
-                        }
+                      {CLASSES.map((cls) => {
+                        const summary = totalActualByClass[cls];
+                        const comparisonTone = getSummaryComparisonTone(summary.total, totalStandard);
                         return (
-                          <td key={cls} className={`border border-gray-300 p-2 font-extrabold text-base ${color}`}>
-                            {total}
+                          <td key={cls} className={`border border-gray-300 p-2 align-middle ${comparisonTone.cellClass}`}>
+                            {renderTermCountStack(summary, {
+                              totalClassName: `${comparisonTone.totalClass} text-base`,
+                              detailClassName: 'text-slate-600'
+                            })}
                           </td>
                         );
                       })}
@@ -3487,7 +3588,7 @@ export default function TimetableApp() {
                 </table>
               </div>
               <p className="mt-4 text-sm text-gray-500">
-                ※ 휴업일은 시수에 집계되지 않습니다. 기준 시수를 입력하면 각 학급의 실제 배정 시수와 자동 비교됩니다. 일치하면 <span className="text-emerald-600 font-bold bg-emerald-50 px-1 rounded">초록색</span>, 부족하면 <span className="text-red-500 font-bold bg-red-50 px-1 rounded">빨간색</span>, 초과하면 <span className="text-blue-600 font-bold bg-blue-50 px-1 rounded">파란색</span>으로 표시되어 오류를 한눈에 잡을 수 있습니다.
+                ※ 휴업일은 시수에 집계되지 않습니다. 각 칸은 <span className="font-semibold">1학기 / 2학기 / 총계</span> 순서이며, 색상 비교는 총계를 기준 시수와 대조해 표시합니다. 일치하면 <span className="text-emerald-600 font-bold bg-emerald-50 px-1 rounded">초록색</span>, 부족하면 <span className="text-red-500 font-bold bg-red-50 px-1 rounded">빨간색</span>, 초과하면 <span className="text-blue-600 font-bold bg-blue-50 px-1 rounded">파란색</span>입니다.
               </p>
             </div>
           );
@@ -3496,41 +3597,73 @@ export default function TimetableApp() {
         {/* ======================= TEACHER SUMMARY VIEW (전담 시수) ======================= */}
         {viewMode === 'teacher_summary' && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 animate-fade-in">
-            <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-              <Calculator className="text-teal-600"/> 교사별 학급 시수 현황표
-            </h2>
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4 border-b border-gray-100 pb-4">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <Calculator className="text-teal-600"/> 교사별 학급 시수 현황표
+              </h2>
+              <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
+                <span className="px-3 py-1 rounded-full bg-slate-100 border border-slate-200">각 칸: 1학기 / 2학기 / 총계</span>
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse border border-gray-300 text-center">
                 <thead>
                   <tr className="bg-gray-100 text-gray-800">
                     <th className="border border-gray-300 p-3 font-bold w-32">교사명</th>
                     <th className="border border-gray-300 p-3 font-bold w-24">담당 과목</th>
-                    {CLASSES.map(cls => <th key={cls} className="border border-gray-300 p-3 w-16 text-sm">{cls}</th>)}
-                    <th className="border border-gray-300 p-3 font-bold bg-green-50 w-24">총 시수</th>
+                    {CLASSES.map((cls) => (
+                      <th key={cls} className="border border-gray-300 p-3 min-w-[96px] text-sm">
+                        <div>{cls}</div>
+                        <div className="text-[10px] font-medium text-slate-500">1학기 · 2학기 · 총계</div>
+                      </th>
+                    ))}
+                    <th className="border border-gray-300 p-3 font-bold bg-green-50 min-w-[110px]">
+                      <div>교사 총 시수</div>
+                      <div className="text-[10px] font-medium text-slate-500">1학기 · 2학기 · 총계</div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {teacherConfigs.map(teacher => {
-                    let total = 0;
+                  {teacherConfigs.map((teacher) => {
+                    const teacherSummary = teacherSummaryCounts[teacher.id] || {
+                      byClass: {},
+                      total: createTermCountSummary()
+                    };
                     return (
                       <tr key={teacher.id} className="hover:bg-gray-50 transition-colors">
                         <td className="border border-gray-300 p-3 font-bold text-gray-700">{teacher.name}</td>
                         <td className="border border-gray-300 p-3">
                           <span className={`px-2 py-1 rounded text-xs font-bold text-gray-900 ${getSubjectColor(teacher.subject)}`}>{teacher.subject}</span>
                         </td>
-                        {CLASSES.map(cls => {
-                          let count = 0;
-                          schedules[cls].forEach(row => row.forEach(cell => { if(cell.teacherId === teacher.id) count++; }));
-                          total += count;
-                          return <td key={cls} className={`border border-gray-300 p-3 font-medium ${count > 0 ? 'text-blue-600 bg-blue-50/30' : 'text-gray-300'}`}>{count > 0 ? count : '-'}</td>;
+                        {CLASSES.map((cls) => {
+                          const summary = teacherSummary.byClass?.[cls] || createTermCountSummary();
+                          const hasCount = summary.total > 0;
+
+                          return (
+                            <td key={cls} className={`border border-gray-300 p-3 align-middle ${hasCount ? 'bg-blue-50/40' : ''}`}>
+                              {renderTermCountStack(summary, {
+                                totalClassName: hasCount ? 'text-blue-600' : 'text-gray-300',
+                                detailClassName: hasCount ? 'text-slate-600' : 'text-slate-400'
+                              })}
+                            </td>
+                          );
                         })}
-                        <td className="border border-gray-300 p-3 font-bold text-green-700 bg-green-50/50 text-lg">{total}</td>
+                        <td className="border border-gray-300 p-3 align-middle bg-green-50/50">
+                          {renderTermCountStack(teacherSummary.total, {
+                            totalClassName: 'text-green-700 text-base',
+                            detailClassName: 'text-green-700',
+                            totalLabel: '총계'
+                          })}
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
+            <p className="mt-4 text-sm text-gray-500">
+              ※ 전담 교사의 학급별 배정을 <span className="font-semibold">1학기 / 2학기 / 총계</span> 순서로 동시에 확인할 수 있습니다.
+            </p>
           </div>
         )}
 
