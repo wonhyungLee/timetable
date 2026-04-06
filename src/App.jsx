@@ -114,33 +114,6 @@ const createTermCountSummary = () => ({
   total: 0
 });
 
-const TERM_STANDARD_HOURS_STORAGE_KEY = 'timetable-term-standard-hours-v1';
-
-const createEmptyStandardHours = () => {
-  const initial = {};
-  ALL_SUBJECTS.forEach((subject) => {
-    initial[subject] = 0;
-  });
-  return initial;
-};
-
-const createEmptyTermStandardHours = () => {
-  const initial = {};
-  ALL_SUBJECTS.forEach((subject) => {
-    initial[subject] = {
-      firstTerm: 0,
-      secondTerm: 0
-    };
-  });
-  return initial;
-};
-
-const toSafeHourValue = (value) => {
-  const numericValue = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(numericValue)) return 0;
-  return Math.max(0, Math.trunc(numericValue));
-};
-
 const getTermCountKeyForWeek = (weekName = '') => {
   if (typeof weekName !== 'string') return null;
   if (weekName.startsWith('1학기')) return 'firstTerm';
@@ -351,50 +324,6 @@ const createHomeroomFallbackCell = (className, periodIndex, dayIndex) => ({
 
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-const normalizeTermStandardHours = (
-  sourceTermStandardHours,
-  fallbackStandardHours = createEmptyStandardHours()
-) => {
-  const source = isPlainObject(sourceTermStandardHours) ? sourceTermStandardHours : {};
-  const fallback = isPlainObject(fallbackStandardHours) ? fallbackStandardHours : createEmptyStandardHours();
-  const next = createEmptyTermStandardHours();
-
-  ALL_SUBJECTS.forEach((subject) => {
-    const raw = isPlainObject(source[subject]) ? source[subject] : null;
-
-    if (!raw) {
-      next[subject] = {
-        firstTerm: toSafeHourValue(fallback[subject]),
-        secondTerm: 0
-      };
-      return;
-    }
-
-    next[subject] = {
-      firstTerm: toSafeHourValue(raw.firstTerm),
-      secondTerm: toSafeHourValue(raw.secondTerm)
-    };
-  });
-
-  return next;
-};
-
-const loadTermStandardHoursFromStorage = (fallbackStandardHours = createEmptyStandardHours()) => {
-  if (typeof window === 'undefined') {
-    return normalizeTermStandardHours({}, fallbackStandardHours);
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(TERM_STANDARD_HOURS_STORAGE_KEY);
-    if (!rawValue) {
-      return normalizeTermStandardHours({}, fallbackStandardHours);
-    }
-    return normalizeTermStandardHours(JSON.parse(rawValue), fallbackStandardHours);
-  } catch (_error) {
-    return normalizeTermStandardHours({}, fallbackStandardHours);
-  }
-};
-
 const normalizeTeacherConfigsForSync = (sourceTeachers, fallbackTeachers = []) => {
   if (!Array.isArray(sourceTeachers)) return fallbackTeachers;
 
@@ -577,10 +506,11 @@ export default function TimetableApp() {
   const [baselineReady, setBaselineReady] = useState(false);
 
   // 기준 시수 상태 관리
-  const [standardHours, setStandardHours] = useState(() => createEmptyStandardHours());
-  const [termStandardHours, setTermStandardHours] = useState(() =>
-    loadTermStandardHoursFromStorage(createEmptyStandardHours())
-  );
+  const [standardHours, setStandardHours] = useState(() => {
+    const initial = {};
+    ALL_SUBJECTS.forEach(s => initial[s] = 0);
+    return initial;
+  });
 
   const [viewMode, setViewMode] = useState('weekly'); // weekly, monthly, class_summary, teacher_summary, settings
   const [weeklyLayoutMode, setWeeklyLayoutMode] = useState('single'); // single, all
@@ -619,7 +549,6 @@ export default function TimetableApp() {
   const lastSyncedPayloadRef = useRef('');
   const saveTimerRef = useRef(null);
   const clientIdRef = useRef(`client-${Math.random().toString(36).slice(2, 10)}`);
-  const standardHoursSyncFromTermRef = useRef(false);
   const panDragRef = useRef(null);
   const contextMenuRef = useRef(null);
   const baselineSchedulesRef = useRef(null);
@@ -792,22 +721,6 @@ export default function TimetableApp() {
 
     return counts;
   }, [allSchedules, teacherConfigs]);
-  const standardHoursByTerm = useMemo(() => {
-    const normalized = normalizeTermStandardHours(termStandardHours, standardHours);
-    const next = {};
-
-    ALL_SUBJECTS.forEach((subject) => {
-      const firstTerm = toSafeHourValue(normalized[subject]?.firstTerm);
-      const secondTerm = toSafeHourValue(normalized[subject]?.secondTerm);
-      next[subject] = {
-        firstTerm,
-        secondTerm,
-        total: firstTerm + secondTerm
-      };
-    });
-
-    return next;
-  }, [termStandardHours, standardHours]);
 
   useEffect(() => {
     if (!toast.show) return undefined;
@@ -816,47 +729,6 @@ export default function TimetableApp() {
     }, toast.duration || 3000);
     return () => clearTimeout(timer);
   }, [toast.show, toast.duration]);
-
-  useEffect(() => {
-    if (standardHoursSyncFromTermRef.current) {
-      standardHoursSyncFromTermRef.current = false;
-      return;
-    }
-
-    setTermStandardHours((prev) => {
-      const normalizedPrev = normalizeTermStandardHours(prev, standardHours);
-      const next = { ...normalizedPrev };
-      let hasChanges = false;
-
-      ALL_SUBJECTS.forEach((subject) => {
-        const totalStandard = toSafeHourValue(standardHours[subject]);
-        const firstTerm = toSafeHourValue(normalizedPrev[subject]?.firstTerm);
-        const secondTerm = toSafeHourValue(normalizedPrev[subject]?.secondTerm);
-
-        if (firstTerm + secondTerm === totalStandard) return;
-
-        hasChanges = true;
-        next[subject] = firstTerm >= totalStandard
-          ? { firstTerm: totalStandard, secondTerm: 0 }
-          : { firstTerm, secondTerm: totalStandard - firstTerm };
-      });
-
-      return hasChanges ? next : prev;
-    });
-  }, [standardHours]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      window.localStorage.setItem(
-        TERM_STANDARD_HOURS_STORAGE_KEY,
-        JSON.stringify(normalizeTermStandardHours(termStandardHours, standardHours))
-      );
-    } catch (_error) {
-      // localStorage를 사용할 수 없는 환경에서는 조용히 무시한다.
-    }
-  }, [termStandardHours, standardHours]);
 
   const showNotification = (message, type = 'error', options = {}) =>
     setToast({
@@ -867,41 +739,8 @@ export default function TimetableApp() {
       duration: options.duration ?? 3000
     });
 
-  const handleTermStandardHoursChange = (subject, termKey, rawValue) => {
-    const nextValue = toSafeHourValue(rawValue);
-
-    setTermStandardHours((prev) => {
-      const normalizedPrev = normalizeTermStandardHours(prev, standardHours);
-      const nextSubjectHours = {
-        ...normalizedPrev[subject],
-        [termKey]: nextValue
-      };
-
-      standardHoursSyncFromTermRef.current = true;
-      setStandardHours((prevStandardHours) => ({
-        ...prevStandardHours,
-        [subject]: nextSubjectHours.firstTerm + nextSubjectHours.secondTerm
-      }));
-
-      return {
-        ...normalizedPrev,
-        [subject]: nextSubjectHours
-      };
-    });
-  };
-
   const formatSlotLabel = (periodIndex, dayIndex) => `${DAYS[dayIndex]} ${PERIODS[periodIndex]}교시`;
   const formatSummaryCount = (count) => (count > 0 ? count : '-');
-  const formatStandardHoursInputValue = (count) => (count > 0 ? count : '');
-  const getSummaryLineTextClass = (actual, standard) => {
-    if (standard > 0) {
-      if (actual > standard) return 'text-blue-600';
-      if (actual < standard) return 'text-red-500';
-      return 'text-emerald-600';
-    }
-    if (actual > 0) return 'text-blue-600';
-    return 'text-slate-400';
-  };
   const renderTermCountStack = (counts, options = {}) => {
     const safeCounts = counts || createTermCountSummary();
     const {
@@ -915,25 +754,6 @@ export default function TimetableApp() {
         <span className={`text-[11px] font-medium ${detailClassName}`}>1학기 {formatSummaryCount(safeCounts.firstTerm)}</span>
         <span className={`text-[11px] font-medium ${detailClassName}`}>2학기 {formatSummaryCount(safeCounts.secondTerm)}</span>
         <span className={`text-sm font-bold ${totalClassName}`}>{totalLabel} {formatSummaryCount(safeCounts.total)}</span>
-      </div>
-    );
-  };
-  const renderComparisonTermCountStack = (counts, standardCounts, options = {}) => {
-    const safeCounts = counts || createTermCountSummary();
-    const safeStandardCounts = standardCounts || createTermCountSummary();
-    const { totalLabel = '총계' } = options;
-
-    return (
-      <div className="flex flex-col items-center gap-0.5 leading-tight">
-        <span className={`text-[11px] font-medium ${getSummaryLineTextClass(safeCounts.firstTerm, safeStandardCounts.firstTerm)}`}>
-          1학기 {formatSummaryCount(safeCounts.firstTerm)}
-        </span>
-        <span className={`text-[11px] font-medium ${getSummaryLineTextClass(safeCounts.secondTerm, safeStandardCounts.secondTerm)}`}>
-          2학기 {formatSummaryCount(safeCounts.secondTerm)}
-        </span>
-        <span className={`text-sm font-bold ${getSummaryLineTextClass(safeCounts.total, safeStandardCounts.total)}`}>
-          {totalLabel} {formatSummaryCount(safeCounts.total)}
-        </span>
       </div>
     );
   };
@@ -3680,7 +3500,7 @@ export default function TimetableApp() {
         {/* ======================= CLASS SUMMARY VIEW (학급별 교과 시수) ======================= */}
         {viewMode === 'class_summary' && (() => {
           const totalActualByClass = {};
-          const totalStandardSummary = createTermCountSummary();
+          let totalStandard = 0;
           CLASSES.forEach((className) => {
             totalActualByClass[className] = createTermCountSummary();
           });
@@ -3692,8 +3512,8 @@ export default function TimetableApp() {
                   <BookOpen className="text-emerald-600"/> 전체 학급 교과/창체 시수 집계표
                 </h2>
                 <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-600">
-                  <span className="px-3 py-1 rounded-full bg-slate-100 border border-slate-200">실제 시수: 1학기 / 2학기 / 총계</span>
-                  <span className="px-3 py-1 rounded-full bg-yellow-50 text-yellow-800 border border-yellow-100">기준 시수 입력: 1학기 / 2학기</span>
+                  <span className="px-3 py-1 rounded-full bg-slate-100 border border-slate-200">각 칸: 1학기 / 2학기 / 총계</span>
+                  <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">색상 기준: 총계 vs 기준 시수</span>
                 </div>
               </div>
 
@@ -3702,7 +3522,7 @@ export default function TimetableApp() {
                   <thead>
                     <tr className="bg-gray-100 text-gray-800">
                       <th className="border border-gray-300 p-2 font-bold whitespace-nowrap">과목 / 활동</th>
-                      <th className="border border-gray-300 p-2 font-bold bg-yellow-50 min-w-[120px]">기준 시수</th>
+                      <th className="border border-gray-300 p-2 font-bold bg-yellow-50 w-24">기준 시수</th>
                       {CLASSES.map((cls) => (
                         <th key={cls} className="border border-gray-300 p-2 font-bold min-w-[96px]">
                           <div>{cls}</div>
@@ -3713,51 +3533,34 @@ export default function TimetableApp() {
                   </thead>
                   <tbody>
                     {ALL_SUBJECTS.filter((subject) => subject !== '휴업일').map((subj) => {
-                      const standardSummary = standardHoursByTerm[subj] || createTermCountSummary();
-                      totalStandardSummary.firstTerm += standardSummary.firstTerm;
-                      totalStandardSummary.secondTerm += standardSummary.secondTerm;
-                      totalStandardSummary.total += standardSummary.total;
+                      const standard = Number(standardHours[subj]) || 0;
+                      totalStandard += standard;
 
                       return (
                         <tr key={subj} className="hover:bg-gray-50 transition-colors">
                           <td className="border border-gray-300 p-2 font-bold text-gray-700">{subj}</td>
-                          <td className="border border-gray-300 p-2 bg-yellow-50/30 align-middle">
-                            <div className="flex min-w-[108px] flex-col gap-1.5">
-                              <label className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-600">
-                                <span>1학기</span>
-                                <input
-                                  type="number"
-                                  value={formatStandardHoursInputValue(standardSummary.firstTerm)}
-                                  onChange={(e) => handleTermStandardHoursChange(subj, 'firstTerm', e.target.value)}
-                                  className="w-14 rounded border border-gray-300 bg-white px-1.5 py-1 text-center text-xs font-bold focus:ring-2 focus:ring-emerald-500"
-                                  placeholder="0"
-                                />
-                              </label>
-                              <label className="flex items-center justify-between gap-2 text-[11px] font-semibold text-slate-600">
-                                <span>2학기</span>
-                                <input
-                                  type="number"
-                                  value={formatStandardHoursInputValue(standardSummary.secondTerm)}
-                                  onChange={(e) => handleTermStandardHoursChange(subj, 'secondTerm', e.target.value)}
-                                  className="w-14 rounded border border-gray-300 bg-white px-1.5 py-1 text-center text-xs font-bold focus:ring-2 focus:ring-emerald-500"
-                                  placeholder="0"
-                                />
-                              </label>
-                              <div className="rounded bg-yellow-100 px-2 py-1 text-[11px] font-bold text-yellow-900">
-                                총계 {formatSummaryCount(standardSummary.total)}
-                              </div>
-                            </div>
+                          <td className="border border-gray-300 p-1 bg-yellow-50/30">
+                            <input 
+                              type="number" 
+                              value={standardHours[subj] || ''} 
+                              onChange={(e) => setStandardHours({...standardHours, [subj]: parseInt(e.target.value) || 0})}
+                              className="w-16 border border-gray-300 p-1 rounded text-center focus:ring-2 focus:ring-emerald-500 font-bold"
+                              placeholder="0"
+                            />
                           </td>
                           {CLASSES.map((cls) => {
                             const summary = classSummaryCounts[cls]?.[subj] || createTermCountSummary();
                             totalActualByClass[cls].firstTerm += summary.firstTerm;
                             totalActualByClass[cls].secondTerm += summary.secondTerm;
                             totalActualByClass[cls].total += summary.total;
-                            const comparisonTone = getSummaryComparisonTone(summary.total, standardSummary.total);
+                            const comparisonTone = getSummaryComparisonTone(summary.total, standard);
 
                             return (
                               <td key={cls} className={`border border-gray-300 p-2 align-middle ${comparisonTone.cellClass}`}>
-                                {renderComparisonTermCountStack(summary, standardSummary)}
+                                {renderTermCountStack(summary, {
+                                  totalClassName: comparisonTone.totalClass,
+                                  detailClassName: summary.total > 0 ? 'text-slate-600' : 'text-slate-400'
+                                })}
                               </td>
                             );
                           })}
@@ -3767,19 +3570,15 @@ export default function TimetableApp() {
                     {/* 총계 렌더링 */}
                     <tr className="bg-emerald-50 border-t-2 border-emerald-200">
                       <td className="border border-gray-300 p-2 font-extrabold text-emerald-900">총계</td>
-                      <td className="border border-gray-300 p-2 align-middle">
-                        {renderTermCountStack(totalStandardSummary, {
-                          totalClassName: 'text-emerald-900 text-base',
-                          detailClassName: 'text-emerald-800'
-                        })}
-                      </td>
+                      <td className="border border-gray-300 p-2 font-extrabold text-emerald-900 text-lg">{totalStandard}</td>
                       {CLASSES.map((cls) => {
                         const summary = totalActualByClass[cls];
-                        const comparisonTone = getSummaryComparisonTone(summary.total, totalStandardSummary.total);
+                        const comparisonTone = getSummaryComparisonTone(summary.total, totalStandard);
                         return (
                           <td key={cls} className={`border border-gray-300 p-2 align-middle ${comparisonTone.cellClass}`}>
-                            {renderComparisonTermCountStack(summary, totalStandardSummary, {
-                              totalLabel: '총계'
+                            {renderTermCountStack(summary, {
+                              totalClassName: `${comparisonTone.totalClass} text-base`,
+                              detailClassName: 'text-slate-600'
                             })}
                           </td>
                         );
@@ -3789,7 +3588,7 @@ export default function TimetableApp() {
                 </table>
               </div>
               <p className="mt-4 text-sm text-gray-500">
-                ※ 휴업일은 시수에 집계되지 않습니다. 기준 시수 칸에서 <span className="font-semibold">1학기 / 2학기</span>를 각각 입력하면 총계가 자동 계산됩니다. 실제 시수 표시는 <span className="font-semibold">1학기 / 2학기 / 총계</span> 순서이며, 각 줄은 해당 학기 기준 시수와 비교됩니다.
+                ※ 휴업일은 시수에 집계되지 않습니다. 각 칸은 <span className="font-semibold">1학기 / 2학기 / 총계</span> 순서이며, 색상 비교는 총계를 기준 시수와 대조해 표시합니다. 일치하면 <span className="text-emerald-600 font-bold bg-emerald-50 px-1 rounded">초록색</span>, 부족하면 <span className="text-red-500 font-bold bg-red-50 px-1 rounded">빨간색</span>, 초과하면 <span className="text-blue-600 font-bold bg-blue-50 px-1 rounded">파란색</span>입니다.
               </p>
             </div>
           );
