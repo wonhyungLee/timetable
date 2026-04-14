@@ -2831,6 +2831,27 @@ export default function TimetableApp() {
 
               {monthlyLayoutMode === 'matrix' ? (
                 <div className="flex flex-wrap items-center gap-2 text-sm bg-white p-2 border border-gray-200 rounded-lg shadow-sm">
+                  <span className="text-[11px] font-bold text-indigo-700">표시 범위</span>
+                  <div className="flex items-center gap-1 bg-indigo-100 p-1 rounded-lg mr-2">
+                    <button
+                      onClick={() => setMonthlyClassWeeklyRange('month')}
+                      className={`px-2.5 py-1 text-[11px] rounded-md font-bold ${monthlyClassWeeklyRange === 'month' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-500'}`}
+                    >
+                      현재 월
+                    </button>
+                    <button
+                      onClick={() => setMonthlyClassWeeklyRange('first_term')}
+                      className={`px-2.5 py-1 text-[11px] rounded-md font-bold ${monthlyClassWeeklyRange === 'first_term' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-500'}`}
+                    >
+                      1학기 전체
+                    </button>
+                    <button
+                      onClick={() => setMonthlyClassWeeklyRange('second_term')}
+                      className={`px-2.5 py-1 text-[11px] rounded-md font-bold ${monthlyClassWeeklyRange === 'second_term' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-500'}`}
+                    >
+                      2학기 전체
+                    </button>
+                  </div>
                   <span className="font-semibold text-gray-600 mr-2"><LayoutDashboard size={14} className="inline"/> 동선 하이라이트(복수 선택):</span>
                   <button onClick={() => setHighlightTeacherIds([])} className={`px-2 py-1 rounded ${!hasTeacherHighlightFilter ? 'bg-gray-800 text-white' : 'bg-gray-100'}`}>전체보기</button>
                   {teacherConfigs.map(teacher => (
@@ -3328,11 +3349,14 @@ export default function TimetableApp() {
 
         {viewMode === 'monthly' && monthlyLayoutMode === 'matrix' && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[75vh]">
-            <div className="bg-indigo-50 border-b border-indigo-100 p-3 flex justify-between items-center shrink-0">
+            <div className="bg-indigo-50 border-b border-indigo-100 p-3 flex flex-col md:flex-row md:justify-between md:items-center gap-2 shrink-0">
               <div className="flex items-center gap-2">
                 <Info className="text-indigo-500" size={18} />
                 <span className="text-sm text-indigo-800 font-medium">월간 조망 화면에서는 <strong>다른 학급의 전담 수업과도 자유롭게 교환</strong>할 수 있습니다! 전담 중복은 빨간 테두리, 전담 원배치/템플릿 불일치는 파란 테두리로 표시됩니다.</span>
               </div>
+              <span className="text-xs md:text-sm font-bold text-indigo-700 bg-white border border-indigo-200 px-2.5 py-1 rounded-lg whitespace-nowrap">
+                {monthlyClassWeeklyRangeLabel}
+              </span>
             </div>
             <div className="overflow-auto flex-1 relative">
               <table className="w-full border-collapse text-sm min-w-[1000px]">
@@ -3344,7 +3368,7 @@ export default function TimetableApp() {
                   </tr>
                 </thead>
                 <tbody className="bg-white">
-                  {MONTHS[currentMonthIndex].weekIndices.map(weekIdx => {
+                  {monthlyClassWeeklyWeekIndices.map((weekIdx) => {
                     const weekName = WEEKS[weekIdx];
                     const weekSchedules = allSchedules[weekName];
                     const daysWithDates = getDatesForWeek(weekName);
@@ -3455,7 +3479,7 @@ export default function TimetableApp() {
                       <span className="text-[11px] text-indigo-600 font-semibold">1반~12반</span>
                     </div>
                     <div
-                      className={`overflow-auto ${isSpacePanMode ? 'cursor-grab select-none' : ''}`}
+                      className={`overflow-x-auto overflow-y-hidden hover-scrollbar ${isSpacePanMode ? 'cursor-grab select-none' : ''}`}
                       onMouseDown={handlePanSurfaceMouseDown}
                     >
                       <table className="w-full border-collapse min-w-[3200px] table-fixed">

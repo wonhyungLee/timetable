@@ -27,3 +27,34 @@ body {
 .animate-fade-in {
   animation: fadeIn 0.25s ease-out;
 }
+
+/* Hide horizontal scrollbar by default and reveal it on hover for mouse control */
+.hover-scrollbar {
+  scrollbar-width: none; /* Firefox */
+}
+
+.hover-scrollbar::-webkit-scrollbar {
+  height: 0;
+}
+
+.hover-scrollbar:hover {
+  scrollbar-width: thin;
+}
+
+.hover-scrollbar:hover::-webkit-scrollbar {
+  height: 10px;
+}
+
+.hover-scrollbar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 9999px;
+}
+
+.hover-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgba(79, 70, 229, 0.45);
+}
+
+.hover-scrollbar:hover::-webkit-scrollbar-track {
+  background: rgba(129, 140, 248, 0.18);
+  border-radius: 9999px;
+}
