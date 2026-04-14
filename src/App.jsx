@@ -529,6 +529,7 @@ export default function TimetableApp() {
   const [selectedCell, setSelectedCell] = useState(null);
   const [quickEditorAction, setQuickEditorAction] = useState('subject');
   const [currentMonthIndex, setCurrentMonthIndex] = useState(0);
+  const [monthlyClassWeeklyRange, setMonthlyClassWeeklyRange] = useState('month'); // month, first_term, second_term
   const [highlightTeacherIds, setHighlightTeacherIds] = useState([]);
   const [toast, setToast] = useState({ show: false, message: '', type: '', actionType: null, duration: 3000 });
   const [editingTeacherId, setEditingTeacherId] = useState(null);
@@ -597,6 +598,24 @@ export default function TimetableApp() {
   const quickEditorCurrentCell = liveSelectedCell || selectedCell;
   const selectedSubjectOptionValue = selectedCell ? getSubjectSelectionValueForCell(selectedCell) : '';
   const hasTeacherHighlightFilter = highlightTeacherIds.length > 0;
+  const monthlyClassWeeklyWeekIndices = useMemo(() => {
+    if (monthlyClassWeeklyRange === 'first_term') {
+      return WEEKS
+        .map((weekName, idx) => (weekName.startsWith('1학기') ? idx : -1))
+        .filter((idx) => idx >= 0);
+    }
+
+    if (monthlyClassWeeklyRange === 'second_term') {
+      return WEEKS
+        .map((weekName, idx) => (weekName.startsWith('2학기') ? idx : -1))
+        .filter((idx) => idx >= 0);
+    }
+
+    return MONTHS[currentMonthIndex]?.weekIndices || [];
+  }, [monthlyClassWeeklyRange, currentMonthIndex]);
+  const monthlyClassWeeklyRangeLabel = monthlyClassWeeklyRange === 'first_term'
+    ? '1학기 전체'
+    : (monthlyClassWeeklyRange === 'second_term' ? '2학기 전체' : (MONTHS[currentMonthIndex]?.name || '현재 월'));
   const teacherClassNameSetMap = useMemo(() => {
     const map = {};
     teacherConfigs.forEach((teacher) => {
@@ -2822,8 +2841,33 @@ export default function TimetableApp() {
                 </div>
               ) : (
                 <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-3 bg-white p-2 border border-gray-200 rounded-lg shadow-sm">
-                  <div className="text-xs md:text-sm font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-lg">
-                    종합표 내용(1~12반)을 주차 카드 형태로 표시
+                  <div className="flex flex-col gap-2">
+                    <div className="text-xs md:text-sm font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-3 py-1.5 rounded-lg">
+                      종합표 내용(1~12반)을 주차 카드 형태로 표시
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-bold text-indigo-700">표시 범위</span>
+                      <div className="flex items-center gap-1 bg-indigo-100 p-1 rounded-lg">
+                        <button
+                          onClick={() => setMonthlyClassWeeklyRange('month')}
+                          className={`px-2.5 py-1 text-[11px] rounded-md font-bold ${monthlyClassWeeklyRange === 'month' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-500'}`}
+                        >
+                          현재 월
+                        </button>
+                        <button
+                          onClick={() => setMonthlyClassWeeklyRange('first_term')}
+                          className={`px-2.5 py-1 text-[11px] rounded-md font-bold ${monthlyClassWeeklyRange === 'first_term' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-500'}`}
+                        >
+                          1학기 전체
+                        </button>
+                        <button
+                          onClick={() => setMonthlyClassWeeklyRange('second_term')}
+                          className={`px-2.5 py-1 text-[11px] rounded-md font-bold ${monthlyClassWeeklyRange === 'second_term' ? 'bg-white text-indigo-700 shadow-sm' : 'text-indigo-500'}`}
+                        >
+                          2학기 전체
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-lg px-2 py-1.5">
                     <span className="text-xs font-bold text-indigo-600 whitespace-nowrap">텍스트 크기</span>
@@ -3392,9 +3436,12 @@ export default function TimetableApp() {
                 <Info className="text-indigo-500" size={18} />
                 <span className="text-sm text-indigo-800 font-medium">종합표와 같은 내용(전체 학급)을 주차별 카드 형태로 표시합니다. 전담 중복은 빨간 테두리, 전담 원배치/템플릿 불일치는 파란 테두리로 표시되며, Space+클릭 드래그로 가로/세로 이동할 수 있습니다.</span>
               </div>
+              <span className="text-xs md:text-sm font-bold text-indigo-700 bg-white border border-indigo-200 px-2.5 py-1 rounded-lg whitespace-nowrap">
+                {monthlyClassWeeklyRangeLabel}
+              </span>
             </div>
             <div className="p-2 md:p-3 grid grid-cols-1 gap-3">
-              {MONTHS[currentMonthIndex].weekIndices.map((weekIdx) => {
+              {monthlyClassWeeklyWeekIndices.map((weekIdx) => {
                 const weekName = WEEKS[weekIdx];
                 const weekSchedules = allSchedules[weekName];
                 const dayHeaders = getDatesForWeek(weekName);
